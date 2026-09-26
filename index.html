@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<title>一封信</title>
+<meta name="description" content="如果你看到这行文字，说明你已经收下了这张小卡。">
+<meta name="theme-color" content="#F0EEE6">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%23F0EEE6%22%2F%3E%3Cg%20fill%3D%22%236D5BD0%22%3E%3Cellipse%20cx%3D%2210.3%22%20cy%3D%2211.6%22%20rx%3D%225.2%22%20ry%3D%224.5%22%20transform%3D%22rotate(-22%2010.3%2011.6)%22%2F%3E%3Cellipse%20cx%3D%2221.7%22%20cy%3D%2211.6%22%20rx%3D%225.2%22%20ry%3D%224.5%22%20transform%3D%22rotate(22%2021.7%2011.6)%22%2F%3E%3Cellipse%20cx%3D%2211.6%22%20cy%3D%2220.4%22%20rx%3D%224.2%22%20ry%3D%223.6%22%20transform%3D%22rotate(18%2011.6%2020.4)%22%2F%3E%3Cellipse%20cx%3D%2220.4%22%20cy%3D%2220.4%22%20rx%3D%224.2%22%20ry%3D%223.6%22%20transform%3D%22rotate(-18%2020.4%2020.4)%22%2F%3E%3Crect%20x%3D%2215.15%22%20y%3D%227%22%20width%3D%221.7%22%20height%3D%2217%22%20rx%3D%220.85%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
+
+<!-- 部署拿到正式 URL 后，把 og:url / og:image 换成完整地址（如 https://你的地址/assets/og.png），分享时才有预览卡片 -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="一封信">
+<meta property="og:description" content="如果你看到这行文字，说明你已经收下了这张小卡。">
+<meta property="og:url" content="">
+<meta property="og:image" content="assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="assets/style.css">
+<noscript><style>.gate{display:none!important}.line .ch{opacity:1!important;transform:none!important}</style></noscript>
+</head>
+<body class="is-locked">
+
+<!-- 阅读进度 -->
+<div class="progress" aria-hidden="true"><i id="bar"></i></div>
+
+<!-- 开场：信封 -->
+<div class="gate" id="gate">
+  <button class="gate__hit" id="gateBtn" type="button" aria-label="打开这封信">
+    <span class="env" aria-hidden="true">
+      <span class="env__back"></span>
+      <span class="env__letter"></span>
+      <span class="env__front"></span>
+      <span class="env__flap"></span>
+      <span class="seal">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><g fill="#F6F1E7">
+          <ellipse cx="10.3" cy="11.6" rx="5.2" ry="4.5" transform="rotate(-22 10.3 11.6)"/>
+          <ellipse cx="21.7" cy="11.6" rx="5.2" ry="4.5" transform="rotate(22 21.7 11.6)"/>
+          <ellipse cx="11.6" cy="20.4" rx="4.2" ry="3.6" transform="rotate(18 11.6 20.4)"/>
+          <ellipse cx="20.4" cy="20.4" rx="4.2" ry="3.6" transform="rotate(-18 20.4 20.4)"/>
+          <rect x="15.15" y="7" width="1.7" height="17" rx="0.85"/>
+        </g></svg>
+      </span>
+    </span>
+    <span class="gate__title">一封信</span>
+    <span class="gate__hint"><i></i>轻触开启</span>
+  </button>
+</div>
+
+<div class="app" id="app" aria-hidden="true">
+
+  <main class="letter" id="letter">
+    <header class="masthead">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor">
+        <ellipse cx="10.3" cy="11.6" rx="5.2" ry="4.5" transform="rotate(-22 10.3 11.6)"/>
+        <ellipse cx="21.7" cy="11.6" rx="5.2" ry="4.5" transform="rotate(22 21.7 11.6)"/>
+        <ellipse cx="11.6" cy="20.4" rx="4.2" ry="3.6" transform="rotate(18 11.6 20.4)"/>
+        <ellipse cx="20.4" cy="20.4" rx="4.2" ry="3.6" transform="rotate(-18 20.4 20.4)"/>
+        <rect x="15.15" y="7" width="1.7" height="17" rx="0.85"/>
+      </g></svg>
+      <span class="masthead__meta" id="stamp">此刻</span>
+    </header>
+
+    <article class="lines" id="lines">
+      <p class="line line--lead" data-scene="greeting" data-cap="时间">早上好，下午好，或者晚上好</p>
+      <p class="line" data-scene="card" data-cap="小卡">如果你看到这行文字，说明你已经收下了这张小卡</p>
+      <p class="line" data-scene="typing" data-cap="打字">我还是更倾向于将文字打出来</p>
+      <p class="line" data-scene="guess" data-cap="下文">或许你已经猜到接下来的话</p>
+      <p class="line" data-scene="timeline" data-cap="四年">在宁夏大学的四年时光，除去大四一年的实习，我在校的时间只剩下大三一年</p>
+      <p class="line" data-scene="bloom" data-cap="洒脱">于是我决定活得洒脱一些，不再遮掩，勇敢表露自己的感情</p>
+      <p class="line" data-scene="blur" data-cap="初见">很抱歉，我早就记不得我们第一次在何时，以何种方式见面</p>
+      <p class="line" data-scene="icons" data-cap="印象">当时的脑海里，只依稀留下黑框眼镜、粉色长裙和高跟鞋</p>
+      <p class="line" data-scene="girl" data-cap="姑娘">以及一位刚刚步入大学，富有活力的姑娘</p>
+      <p class="line line--accent" data-scene="purple" data-cap="紫色">紫色，令人产生一些富有生命力的联想</p>
+      <p class="line" data-scene="butterfly" data-cap="蝴蝶">做一只蝴蝶，飞舞在世间，你或许见识到许多风景</p>
+      <p class="line line--ask" data-scene="rainbow" data-cap="彩虹">你愿意为雨后乍现的一抹彩虹，短暂驻足吗？</p>
+
+      <section class="end" data-scene="seal" data-cap="收好">
+        <span class="end__rule" aria-hidden="true"></span>
+        <button class="end__btn" id="againBtn" type="button">从头再读一遍</button>
+        <span class="end__note">轻触下方画布，可以重播当前动画</span>
+      </section>
+    </article>
+  </main>
+
+  <aside class="stage-wrap">
+    <div class="stage" id="stage" tabindex="0" role="img" aria-label="与当前文字对应的动画">
+      <canvas id="cv"></canvas>
+      <div class="cap">
+        <span class="cap__idx" id="capIdx">01</span>
+        <span class="cap__name" id="capName">时间</span>
+      </div>
+      <span class="swipe" id="swipe" aria-hidden="true">向下滑动 · 继续读</span>
+    </div>
+  </aside>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
