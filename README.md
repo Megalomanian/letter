@@ -1,5 +1,7 @@
 # 一封信
 
+**线上地址：<https://megalomanian.github.io/letter/>**（GitHub Pages，仓库：<https://github.com/Megalomanian/letter>）
+
 一个纯静态的「信」页面：手机打开（比如贴一下 NFC 小卡）先看到信封，轻触展开，
 然后**一页一句地翻**——每次翻页，下方那块常驻画布就换成与这句话对应的动画：
 从早上好的天色，到紫色的洇开，再到用紫色点云聚合出来、扇动翅膀的 3D 蝴蝶，
