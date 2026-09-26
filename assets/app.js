@@ -263,8 +263,30 @@
      场景 02 · 小卡（按需求：这一段画布留空，只保留纸面）
      ========================================================================== */
   function sceneBlank(w, h) {
+    var cw = Math.min(w * .60, h * 1.02, 236), ch = cw / 1.58;
     return {
-      draw: function () { paper(ctx, w, h); }
+      draw: function (t) {
+        paper(ctx, w, h);
+        var cy = h * .49 + Math.sin(t * .9) * 2.2;
+        ctx.save();
+        ctx.translate(w / 2, cy);
+        ctx.rotate(Math.sin(t * .5) * .013);
+        /* 影子 */
+        ctx.save();
+        ctx.shadowColor = 'rgba(70,52,34,.20)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 11;
+        ctx.fillStyle = '#FBFAF6';
+        rrPath(ctx, -cw / 2, -ch / 2, cw, ch, 10); ctx.fill();
+        ctx.restore();
+        /* 描边 + 顶部高光 */
+        ctx.strokeStyle = 'rgba(25,25,25,.13)'; ctx.lineWidth = 1;
+        rrPath(ctx, -cw / 2 + .5, -ch / 2 + .5, cw - 1, ch - 1, 9.5); ctx.stroke();
+        var hl = ctx.createLinearGradient(0, -ch / 2, 0, ch / 2);
+        hl.addColorStop(0, 'rgba(255,255,255,.85)');
+        hl.addColorStop(.45, 'rgba(255,255,255,0)');
+        ctx.fillStyle = hl;
+        rrPath(ctx, -cw / 2 + 1, -ch / 2 + 1, cw - 2, ch - 2, 9); ctx.fill();
+        ctx.restore();
+      }
     };
   }
 
@@ -332,107 +354,133 @@
   }
 
   /* ==========================================================================
-     场景 04 / 06 · 一句话从模糊里浮现（三个点 → 浮现 → 散开）
-     "洒脱" 那段参考这段来做，只换字、换色、加一层暖光
+     场景 04 / 06 · 粒子汇聚成字
+     点云从画布各处飞向字形像素，聚成字；随后清晰的衬线字浮出来，点若隐若现地留着
      ========================================================================== */
-  function makeReveal(w, h, PH, o) {
+  var sampleCv = null;
+  function sampleGlyphs(str, fs) {
+    if (!sampleCv) sampleCv = document.createElement('canvas');
+    var pad = Math.ceil(fs * .7);
+    var tw = Math.ceil(fs * str.length * 1.15) + pad * 2;
+    var th = Math.ceil(fs * 1.75) + pad * 2;
+    sampleCv.width = tw; sampleCv.height = th;
+    var c = sampleCv.getContext('2d');
+    c.clearRect(0, 0, tw, th);
+    c.font = fSerif(fs, 400);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = '#000';
+    c.fillText(str, tw / 2, th / 2);
+    var data = c.getImageData(0, 0, tw, th).data;
+    var pts = [];
+    for (var y = 0; y < th; y += 2) {
+      for (var x = 0; x < tw; x += 2) {
+        if (data[(y * tw + x) * 4 + 3] > 120) pts.push([x - tw / 2, y - th / 2]);
+      }
+    }
+    return pts;
+  }
+
+  function makeConverge(w, h, PH, o) {
     o = o || {};
-    var cyc = o.cycle || 4.6;
-    var inkCol = o.ink || C.ink;
+    var dotCol = o.dot || C.violet;
     var accent = o.accent || C.clay;
+    var inkCol = o.ink || C.ink;
     var glowCol = o.glow || null;
-    var R = mulberry32(o.seed || 5), motes = [], i;
-    for (i = 0; i < 18; i++) {
-      motes.push({ x: R() * w, y: R() * h, sp: .3 + R() * .6, sz: .6 + R() * 1.4 });
+    var cycle = o.cycle || 3.8;
+    var fs = clamp(w * .072, 17, 32);
+    var R = mulberry32(o.seed || 3);
+    var N = Math.round(clamp(w * h / 1500, 150, 400));
+    var sets = PH.map(function (str) {
+      var pts = sampleGlyphs(str, fs), out = [], i;
+      if (!pts.length) return [];
+      for (i = 0; i < N; i++) out.push(pts[Math.floor(i * pts.length / N) % pts.length]);
+      return out;
+    });
+    var parts = [], i;
+    for (i = 0; i < N; i++) {
+      var sx0 = R() * w, sy0 = h * (.10 + R() * .80);
+      parts.push({
+        sx: sx0, sy: sy0, hx: sx0, hy: sy0,
+        d: R() * .42, j: .6 + R() * .9,
+        r: 1.1 + R() * 1.5, warm: (i % 9 === 0)
+      });
     }
     return {
       draw: function (t) {
         paper(ctx, w, h);
-        var k = Math.floor(t / cyc) % PH.length, lt = t % cyc;
-        var r = clamp(w * .016, 4, 7), gapx = r * 2.9;
-        var cy = h * .40;
-        var inA = seg(lt, .9, 1.9), outA = seg(lt, 3.4, 4.3);
-        var alpha = inA * (1 - outA);
+        var k = Math.floor(t / cycle) % PH.length, lt = t % cycle;
+        var pts = sets[k] || [];
+        var raw = clamp((lt - .18) / 1.00, 0, 1);         /* 0.18s 起飞，约 1.2s 聚齐 */
+        var textIn = smoothstep(clamp((lt - 1.05) / .55, 0, 1));
+        var fade = 1 - smoothstep(clamp((lt - (cycle - .72)) / .68, 0, 1));
+        var cx = w / 2, cy = h * .52;
 
-        /* 暖光：整段话浮起来的时候，底下透出一层光 */
+        /* 暖光（06 用） */
         if (glowCol) {
-          var gp = .25 + alpha * .75;
-          var g = ctx.createRadialGradient(w * .5, h * .58, 0, w * .5, h * .58, Math.min(w, h) * .68);
-          g.addColorStop(0, glowCol);
-          g.addColorStop(1, 'rgba(255,255,255,0)');
+          var gp = (.20 + .80 * textIn) * fade;
+          var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) * .68);
+          g.addColorStop(0, glowCol); g.addColorStop(1, 'rgba(255,255,255,0)');
           ctx.save(); ctx.globalAlpha = gp; ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); ctx.restore();
         }
 
-        /* 三点呼吸 */
-        var near = seg(lt, 0, .9), away = seg(lt, 1.5, 2.2);
-        ctx.save();
-        for (var d2 = 0; d2 < 3; d2++) {
-          var ph2 = Math.sin(t * 3 - d2 * .7) * .5 + .5;
-          ctx.globalAlpha = (1 - away) * (.30 + .70 * ph2) * Math.max(.15, near);
+        /* 清晰的字先画，粒子叠在上面 */
+        if (textIn > .01 && fade > .01) {
+          ctx.save();
+          ctx.globalAlpha = textIn * fade;
+          ctx.font = fSerif(fs, 400);
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillStyle = inkCol;
-          ctx.beginPath();
-          ctx.arc(w / 2 + (d2 - 1) * gapx, cy - 8, r * (.72 + .28 * ph2), 0, TAU);
-          ctx.fill();
-        }
-        ctx.restore();
-
-        /* 浮现的句子 */
-        if (alpha > .01) {
-          var fs = clamp(w * .062, 15, 26);
-          var baseY = h * .70;
-          ctx.save();
-          ctx.translate(w / 2, baseY + (1 - inA) * 14 - outA * 10);
-          blurText(ctx, PH[k], 0, 0, fSerif(fs, 400), inkCol, lerp(9, .35, inA), alpha);
+          ctx.fillText(PH[k], cx, cy);
           ctx.restore();
-          /* 下划线 */
-          ctx.save();
-          ctx.globalAlpha = alpha * .55;
-          ctx.strokeStyle = accent; ctx.lineWidth = 1.4;
-          var lw = clamp(w * .10, 24, 54) * easeOutCubic(inA);
-          ctx.beginPath();
-          ctx.moveTo(w / 2 - lw, baseY + fs * .95);
-          ctx.lineTo(w / 2 + lw, baseY + fs * .95);
-          ctx.stroke();
-          ctx.restore();
-          /* 光点：只有带暖光的版本有 */
-          if (glowCol) {
-            ctx.save();
-            for (var s = 0; s < 7; s++) {
-              var a2 = s / 7 * TAU + t * .25;
-              var rr2 = Math.min(w, h) * (.24 + .10 * Math.sin(t * 1.3 + s));
-              var tw = .5 + .5 * Math.sin(t * 2 + s * 1.7);
-              ctx.globalAlpha = alpha * tw * .7;
-              ctx.fillStyle = s % 2 ? accent : C.kraft;
-              ctx.beginPath();
-              ctx.arc(w / 2 + Math.cos(a2) * rr2 * 1.5, baseY - r * 3 + Math.sin(a2) * rr2, 1.6 + tw * 1.4, 0, TAU);
-              ctx.fill();
-            }
-            ctx.restore();
-          }
         }
 
-        /* 飘散的尘点 */
+        /* 粒子 */
         ctx.save();
-        for (var d = 0; d < motes.length; d++) {
-          var mo = motes[d];
-          var yy = (mo.y - t * mo.sp * 12 % (h + 40) + h + 40) % (h + 40);
-          ctx.globalAlpha = .22 * (1 - Math.abs(yy / h - .5) * .9);
-          ctx.fillStyle = C.kraft;
-          ctx.beginPath(); ctx.arc(mo.x, yy, mo.sz, 0, TAU); ctx.fill();
+        var fadeDots = 1 - textIn * .5;
+        for (var b2 = 0; b2 < 2; b2++) {          /* 拖尾线条：按颜色分两批 */
+          ctx.strokeStyle = b2 ? accent : dotCol;
+          ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+          ctx.globalAlpha = fade * fadeDots * (b2 ? .30 : .20);
+          ctx.beginPath();
+          for (i = 0; i < N; i++) {
+            var q = parts[i];
+            if ((q.warm ? 1 : 0) !== b2) continue;
+            /* 拖尾随落定收短：飞行时是长长的射线，落定后只剩一点点 */
+            var pr2 = clamp((raw - q.d * .5) / (1 - q.d * .5 + .0001), 0, 1);
+            var f0 = lerp(0, .80, pr2);
+            ctx.moveTo(lerp(q.sx, q.hx, f0), lerp(q.sy, q.hy, f0));
+            ctx.lineTo(q.hx, q.hy);
+          }
+          ctx.stroke();
+        }
+        for (i = 0; i < N; i++) {
+          var p = parts[i], tp = pts[i];
+          if (!p || !tp) continue;                 /* 防御：取样点不足时跳过这一颗 */
+          var pr = clamp((raw - p.d * .5) / (1 - p.d * .5 + .0001), 0, 1);
+          var pp = easeOutBack(pr, 1.06);           /* 轻微过冲，落点更有弹性 */
+          var tx = cx + tp[0], ty = cy + tp[1];
+          var wob = (1 - pr) * 16 * p.j;
+          var x = lerp(p.sx, tx, pp) + Math.sin(t * 1.4 + i) * wob;
+          var y = lerp(p.sy, ty, pp) + Math.cos(t * 1.2 + i * 1.7) * wob;
+          var tw = .72 + .28 * Math.sin(t * 2.2 + i * .9);
+          p.hx = x; p.hy = y;
+          ctx.globalAlpha = fade * fadeDots * tw * (.40 + .60 * pr);
+          ctx.fillStyle = p.warm ? accent : dotCol;
+          ctx.beginPath();
+          ctx.arc(x, y, p.r * (.7 + .5 * pr), 0, TAU);
+          ctx.fill();
         }
         ctx.restore();
       }
     };
   }
   function sceneGuess(w, h) {
-    return makeReveal(w, h, ['或许你已经猜到', '接下来的话'], { accent: C.clay, seed: 5 });
+    return makeConverge(w, h, ['或许你已经猜到', '接下来的话'], { dot: C.violet, accent: C.clay, seed: 3 });
   }
   function sceneOpen(w, h) {
-    return makeReveal(w, h, ['洒脱一些', '不再遮掩'], {
-      accent: C.violet,
-      glow: 'rgba(212,162,127,.30)',
-      seed: 17,
-      cycle: 4.3
+    return makeConverge(w, h, ['洒脱一些', '不再遮掩'], {
+      dot: C.violet, accent: C.kraft, ink: C.ink,
+      glow: 'rgba(212,162,127,.26)', seed: 11, cycle: 3.6
     });
   }
 
@@ -553,6 +601,7 @@
           g.addColorStop(0, b.c); g.addColorStop(1, 'rgba(255,255,255,0)');
           ctx.fillStyle = g; ctx.fillRect(fx, fy, fw, fh);
         }
+        ctx.restore();                 /* 收掉记忆块的裁剪 */
         /* 虚线相框 */
         ctx.save();
         ctx.strokeStyle = 'rgba(25,25,25,.30)'; ctx.lineWidth = 1.2;
@@ -657,8 +706,8 @@
       { t: '高跟鞋', f: drawHeel }
     ];
     var colW = w / (items.length + .4);
-    var s = Math.min(colW * .62, h * .40);
-    var cy = h * .42;
+    var s = Math.min(colW * .68, h * .46);
+    var cy = h * .50;
     return {
       draw: function (t) {
         paper(ctx, w, h);
@@ -681,14 +730,6 @@
           ctx.clip();
           ctx.globalAlpha = .25 + .75 * p;
           items[i].f(ctx, x, fy, s);
-          ctx.restore();
-          /* 标签 */
-          ctx.save();
-          ctx.globalAlpha = clamp(seg(t, .7 + i * .32, 1.5 + i * .32), 0, 1) * .9;
-          ctx.font = fSans(clamp(w * .033, 9.5, 12.5), 400);
-          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          ctx.fillStyle = C.muted;
-          ctx.fillText(items[i].t, x, h * .76);
           ctx.restore();
         }
       }
@@ -1002,8 +1043,26 @@
     var im = loadImg('rainbow');          /* pic2.jpg：等动画播完再浮出来 */
     var born = nowMs();
     var PHOTO_AT = 3400;                  /* 动画完整播完的时刻（毫秒） */
+    /* 爱心烟花 */
+    var sparks = [], fired = 0, t0Fire = 0;
+    var HCOL = ['#F06BA8', '#E85A6E', '#9A8AE8'];
+    function heartBurst(bx, by, scale, col) {
+      var n = 76, j;
+      for (j = 0; j < n; j++) {
+        var th = (j / n) * TAU;
+        var hx = 16 * Math.pow(Math.sin(th), 3);
+        var hy = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
+        var sp = scale * (.86 + R() * .28);
+        sparks.push({
+          x: bx, y: by, px: bx, py: by, ox: bx, oy: by,
+          vx: hx * sp, vy: hy * sp,
+          life: 0, max: 1.35 + R() * .6,
+          c: col, r: 1.1 + R() * 1.3
+        });
+      }
+    }
     return {
-      draw: function (t) {
+      draw: function (t, dt) {
         paper(ctx, w, h);
         var side = Math.min(w * .64, h * .86);
         var app = easeOutCubic(seg(t, .05, .85));
@@ -1112,6 +1171,16 @@
         var o2 = IMG.rainbow;
         if (o2.ready && im.naturalWidth) {
           var pk = reduceMotion ? 1 : smoothstep(clamp((nowMs() - Math.max(born + PHOTO_AT, o2.ready)) / 1500, 0, 1));
+          if (!reduceMotion && pk > .40) {
+            if (!t0Fire) t0Fire = nowMs();
+            /* 三发，间隔 0.42s */
+            while (fired < 3 && nowMs() - t0Fire >= fired * 420) {
+              var hp = [[.26, .28], [.74, .24], [.50, .64]][fired];
+              heartBurst(px + side * hp[0], py + side * hp[1],
+                side * (.018 + .003 * fired), HCOL[fired % HCOL.length]);
+              fired++;
+            }
+          }
           if (pk > .001) {
             ctx.save();
             ctx.globalAlpha = pk;
@@ -1141,6 +1210,55 @@
         rrPath(ctx, px + .5, py + .5, side - 1, side - 1, 10); ctx.stroke();
         ctx.restore();
         ctx.restore();
+
+        /* 爱心烟花：在照片之上炸开 */
+        if (sparks.length) {
+          dt = dt || 0;
+          var damp = Math.pow(.60, dt), i, p, ci, lv;
+          for (i = sparks.length - 1; i >= 0; i--) {
+            p = sparks[i];
+            p.life += dt;
+            if (p.life >= p.max) { sparks.splice(i, 1); continue; }
+            p.px = p.x; p.py = p.y;
+            p.vx *= damp;
+            p.vy = p.vy * damp + (p.life > .55 ? 58 * dt : 0);   /* 先撑住心形，再落下来 */
+            p.x += p.vx * dt; p.y += p.vy * dt;
+          }
+          var LV = 4;
+          for (ci = 0; ci < HCOL.length; ci++) {
+            for (lv = 0; lv < LV; lv++) {
+              var lo = lv / LV, hi = (lv + 1) / LV, heads = 0;
+              ctx.save();
+              ctx.globalAlpha = (lo + hi) / 2;
+              ctx.strokeStyle = HCOL[ci]; ctx.lineWidth = 1.7; ctx.lineCap = 'round';
+              ctx.fillStyle = HCOL[ci];
+              ctx.beginPath();
+              for (i = 0; i < sparks.length; i++) {
+                p = sparks[i];
+                if (p.c !== HCOL[ci]) continue;
+                var a = 1 - p.life / p.max;
+                if (a < lo || a >= hi) continue;
+                ctx.moveTo(p.ox + (p.x - p.ox) * .55, p.oy + (p.y - p.oy) * .55);
+                ctx.lineTo(p.x, p.y);
+                heads++;
+              }
+              ctx.stroke();
+              if (heads) {
+                ctx.beginPath();
+                for (i = 0; i < sparks.length; i++) {
+                  p = sparks[i];
+                  if (p.c !== HCOL[ci]) continue;
+                  var a2 = 1 - p.life / p.max;
+                  if (a2 < lo || a2 >= hi) continue;
+                  ctx.moveTo(p.x + p.r, p.y);
+                  ctx.arc(p.x, p.y, p.r, 0, TAU);
+                }
+                ctx.fill();
+              }
+              ctx.restore();
+            }
+          }
+        }
       }
     };
   }
@@ -1314,12 +1432,27 @@
     var t = reduceMotion ? 6.2 : (tick - t0) / 1000;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (prev && trans < 1) { prevT += dt; ctx.save(); ctx.globalAlpha = 1; prev.draw(prevT, dt); ctx.restore(); }
+    /* 兜底：单个场景某一帧出错，不能让整个画布永久卡死（状态栈/裁剪会残留） */
+    var broke = false;
+    if (prev && trans < 1) {
+      prevT += dt;
+      ctx.save(); ctx.globalAlpha = 1;
+      try { prev.draw(prevT, dt); } catch (e) { broke = true; }
+      ctx.restore();
+    }
     ctx.save();
     if (prev && trans < 1) ctx.globalAlpha = easeInOutCubic(trans);
-    if (cur) cur.draw(t, dt);
+    try { if (cur) cur.draw(t, dt); } catch (e2) { broke = true; }
     ctx.restore();
+    if (broke) { hardReset(); prev = null; trans = 1; }
     if (prev && trans < 1) { trans = Math.min(1, trans + dt / .55); if (trans >= 1) prev = null; }
+  }
+
+  /* 重设画布尺寸会清空所有 2D 状态（状态栈、裁剪、合成模式），用来从异常里恢复 */
+  function hardReset() {
+    cv.width = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }
 
   function start() {
@@ -1388,6 +1521,8 @@
         chars[k].before(caret);
         p._timer = setTimeout(tick, step);
       } else {
+        /* 打完最后一个字：光标要贴在它右边，而不是停在它左边 */
+        chars[chars.length - 1].after(caret);
         caret.classList.remove('blink');
         p._timer = setTimeout(function () {
           caret.classList.add('blink');
@@ -1564,6 +1699,7 @@
     setTimeout(function () {
       gate.classList.add('is-gone');
       resize();
+      if (!W || !H) setTimeout(resize, 60);
       goTo(0);
       sync();
       /* 提示：翻一页就收起，或者 6.5 秒后自己走 */
@@ -1586,6 +1722,10 @@
       stampEl.textContent = '此刻 · ' + d.getFullYear() + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + ('0' + d.getDate()).slice(-2);
     }
     resize();
+    /* 首次布局可能还没算好尺寸，重试几次，避免画布一直是 0×0 */
+    (function retryResize(n) {
+      if ((!W || !H) && n > 0) { setTimeout(function () { resize(); retryResize(n - 1); }, 80); }
+    })(8);
     setScene('greeting');
     setProgress();
     paint();
