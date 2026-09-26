@@ -95,6 +95,58 @@
     c.restore();
   }
 
+  /* ---------------------------------------------------------------- 图片 */
+  /* 到需要的页码再下载，下完再做「模糊 → 清晰」 */
+  var IMG = {
+    girl: { src: 'pic1.png', el: null, ready: 0 },
+    rainbow: { src: 'pic2.jpg', el: null, ready: 0 }
+  };
+  function loadImg(key) {
+    var o = IMG[key];
+    if (o.el) return o.el;
+    var im = new Image();
+    im.decoding = 'async';
+    im.onload = function () { o.ready = nowMs(); };
+    im.onerror = function () { o.failed = true; };
+    im.src = o.src;
+    o.el = im;
+    return im;
+  }
+  function nowMs() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+
+  /* 画一张模糊的图：支持 ctx.filter 就用它，否则缩到很小再放大来等效模糊 */
+  var blurCv = null;
+  function drawBlurred(img, x, y, w, h, r) {
+    if (r < .5) { ctx.drawImage(img, x, y, w, h); return; }
+    if (canFilter) {
+      ctx.save();
+      ctx.filter = 'blur(' + r.toFixed(1) + 'px)';
+      ctx.drawImage(img, x, y, w, h);
+      ctx.restore();
+      return;
+    }
+    if (!blurCv) blurCv = document.createElement('canvas');
+    var kk = clamp(1 / (1 + r * .55), .02, 1);
+    var bw = Math.max(4, Math.round(w * kk)), bh = Math.max(4, Math.round(h * kk));
+    blurCv.width = bw; blurCv.height = bh;
+    var bc = blurCv.getContext('2d');
+    bc.clearRect(0, 0, bw, bh);
+    bc.drawImage(img, 0, 0, bw, bh);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(blurCv, 0, 0, bw, bh, x, y, w, h);
+    ctx.restore();
+  }
+
+  /* 图片在画布里按比例居中放置 */
+  function fitBox(img, w, h, maxW, maxH) {
+    var iw = img.naturalWidth || 1, ih = img.naturalHeight || 1;
+    var sc = Math.min(maxW / iw, maxH / ih);
+    var dw = iw * sc, dh = ih * sc;
+    return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh };
+  }
+
   /* ==========================================================================
      场景 01 · 时间（早上好 / 下午好 / 晚上好）
      ========================================================================== */
@@ -208,77 +260,11 @@
   }
 
   /* ==========================================================================
-     场景 02 · 小卡
+     场景 02 · 小卡（按需求：这一段画布留空，只保留纸面）
      ========================================================================== */
-  function sceneCard(w, h) {
-    var cw = Math.min(w * .70, h * 1.30, 260), ch = cw / 1.58;
-    var cx = w / 2, cy = h * .47;
+  function sceneBlank(w, h) {
     return {
-      draw: function (t) {
-        paper(ctx, w, h);
-        var per = (cw + ch) * 2, p = easeOutCubic(seg(t, .15, 1.5));
-        var tilt = Math.sin(t * .62) * .016, fy = Math.sin(t * .9) * 2.2;
-        ctx.save();
-        ctx.translate(cx, cy + fy); ctx.rotate(tilt);
-        /* 影 */
-        ctx.save();
-        ctx.shadowColor = 'rgba(70,52,34,.22)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 12;
-        ctx.fillStyle = C.paperA; rrPath(ctx, -cw / 2, -ch / 2, cw, ch, 10); ctx.fill();
-        ctx.restore();
-        /* 描边生长 */
-        ctx.save();
-        ctx.strokeStyle = 'rgba(25,25,25,.20)'; ctx.lineWidth = 1.2;
-        ctx.setLineDash([per, per]);
-        ctx.lineDashOffset = per * (1 - p);
-        rrPath(ctx, -cw / 2, -ch / 2, cw, ch, 10); ctx.stroke();
-        ctx.restore();
-        if (p > .55) {
-          var q = seg(t, .8, 1.8);
-          ctx.save();
-          ctx.globalAlpha = q;
-          /* 蝶标 */
-          var m = ch * .30, mx = -cw * .30, my = -ch * .06;
-          ctx.fillStyle = C.violet; ctx.globalAlpha = q * .92;
-          for (var i = 0; i < 4; i++) {
-            var ang = [-22, 22, 18, -18][i] * D2R, k = i < 2 ? 1 : .82;
-            ctx.save();
-            ctx.translate(mx, my); ctx.rotate(ang);
-            ctx.beginPath(); ctx.ellipse((i % 2 ? 1 : -1) * m * .28, (i < 2 ? -.28 : .30) * m, m * .40 * k, m * .34 * k, 0, 0, TAU);
-            ctx.fill(); ctx.restore();
-          }
-          rrPath(ctx, mx - m * .045, my - m * .62, m * .09, m * 1.26, m * .045); ctx.fill();
-          ctx.restore();
-
-          /* 文字 */
-          var fs = clamp(ch * .17, 10, 16);
-          ctx.save();
-          ctx.globalAlpha = seg(t, 1.0, 1.9);
-          ctx.font = fSans(fs, 500); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-          ctx.fillStyle = C.ink; ctx.fillText('这张小卡', -cw * .02, -ch * .16);
-          ctx.font = fMono(clamp(fs * .66, 8, 10.5), 400);
-          ctx.fillStyle = 'rgba(25,25,25,.5)';
-          ctx.fillText('已 收 下', -cw * .02, ch * .06);
-          ctx.restore();
-
-          /* NFC 芯片 + 波纹 */
-          var chipS = ch * .22, chx = cw * .28, chy = ch * .18;
-          var live = seg(t, 1.1, 2.0);
-          ctx.save();
-          ctx.globalAlpha = live;
-          ctx.strokeStyle = 'rgba(25,25,25,.30)'; ctx.lineWidth = 1.2;
-          rrPath(ctx, chx - chipS / 2, chy - chipS / 2, chipS, chipS, 3); ctx.stroke();
-          for (var g2 = 0; g2 < 3; g2++) {
-            var pp = ((t * .55 + g2 / 3) % 1);
-            ctx.globalAlpha = live * (1 - pp) * .75;
-            ctx.strokeStyle = C.clay; ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.arc(chx + chipS * .55, chy, chipS * (.5 + pp * 1.5), -Math.PI * .42, Math.PI * .42);
-            ctx.stroke();
-          }
-          ctx.restore();
-        }
-        ctx.restore();
-      }
+      draw: function () { paper(ctx, w, h); }
     };
   }
 
@@ -567,19 +553,6 @@
           g.addColorStop(0, b.c); g.addColorStop(1, 'rgba(255,255,255,0)');
           ctx.fillStyle = g; ctx.fillRect(fx, fy, fw, fh);
         }
-        /* 隐约的轮廓：黑框眼镜 / 长裙 / 高跟 的残影 */
-        ctx.save();
-        ctx.globalAlpha = .22 + .10 * Math.sin(t * .8);
-        ctx.filter = canFilter ? 'blur(5px)' : 'none';
-        ctx.strokeStyle = C.ink; ctx.lineWidth = 3;
-        var cx = fx + fw * .5, cy = fy + fh * .46;
-        ctx.beginPath(); ctx.arc(cx, cy - fh * .02, fh * .14, 0, TAU); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx, cy + fh * .12); ctx.lineTo(cx, cy + fh * .30); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx, cy + fh * .30); ctx.lineTo(cx - fh * .06, cy + fh * .48); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx, cy + fh * .30); ctx.lineTo(cx + fh * .06, cy + fh * .48); ctx.stroke();
-        ctx.filter = 'none';
-        ctx.restore();
-        ctx.restore();
         /* 虚线相框 */
         ctx.save();
         ctx.strokeStyle = 'rgba(25,25,25,.30)'; ctx.lineWidth = 1.2;
@@ -723,96 +696,40 @@
   }
 
   /* ==========================================================================
-     场景 09 · 富有活力的姑娘
+     场景 09 · 富有活力的姑娘（pic1.png：由模糊到清晰）
      ========================================================================== */
   function sceneGirl(w, h) {
-    var R = mulberry32(61), sp = [];
-    for (var i = 0; i < 20; i++) sp.push({ a: R() * TAU, d: .3 + R() * .7, ph: R() * TAU, sz: .9 + R() * 1.6, sp2: .4 + R() * .9 });
+    var im = loadImg('girl');
+    var born = nowMs();
     return {
-      draw: function (t) {
+      draw: function () {
         paper(ctx, w, h);
-        var S = Math.min(h * .64, w * .34);
-        var ph = t * 3.1;
-        var ground = h * .84;
-        var bob = Math.abs(Math.sin(ph)) * S * .022;
-        var cx = w * .5 + Math.sin(t * .42) * w * .05;
-        var hip = ground - S * .40 - bob;
-        var sho = hip - S * .22;
-        var headR = S * .078;
-        var headY = sho - S * .10 - headR;
-        var legA = Math.sin(ph) * .30, armA = Math.sin(ph + Math.PI) * .34;
-        /* 影子 */
+        var o = IMG.girl;
+        if (!o.ready || !im.naturalWidth) return;          /* 还没下完就先空着 */
+        var k = reduceMotion ? 1 : smoothstep(clamp((nowMs() - Math.max(born, o.ready)) / 1700, 0, 1));
+        if (k <= .001) return;
+        var bx = fitBox(im, w, h, w * .80, h * .90);
         ctx.save();
-        ctx.globalAlpha = .16;
-        ctx.fillStyle = C.ink;
-        ctx.beginPath(); ctx.ellipse(cx, ground + 2, S * .17, S * .026, 0, 0, TAU); ctx.fill();
+        /* 投影 */
+        ctx.save();
+        ctx.globalAlpha = k * .5;
+        ctx.shadowColor = 'rgba(70,52,34,.34)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 12;
+        ctx.fillStyle = '#FBFAF6';
+        rrPath(ctx, bx.x, bx.y, bx.w, bx.h, 12); ctx.fill();
         ctx.restore();
-        /* 裙 */
+        /* 图片：模糊 → 清晰，略微收一下缩放 */
         ctx.save();
-        ctx.fillStyle = 'rgba(232,160,180,.78)';
-        ctx.strokeStyle = C.pinkD; ctx.lineWidth = Math.max(1.2, S * .012);
-        ctx.beginPath();
-        ctx.moveTo(cx - S * .072, sho);
-        ctx.lineTo(cx + S * .072, sho);
-        ctx.lineTo(cx + S * .20, hip + S * .05);
-        ctx.quadraticCurveTo(cx, hip + S * .13, cx - S * .20, hip + S * .05);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); rrPath(ctx, bx.x, bx.y, bx.w, bx.h, 12); ctx.clip();
+        ctx.translate(bx.x + bx.w / 2, bx.y + bx.h / 2);
+        ctx.scale(lerp(1.04, 1, k), lerp(1.04, 1, k));
+        ctx.translate(-(bx.x + bx.w / 2), -(bx.y + bx.h / 2));
+        ctx.globalAlpha = k;
+        drawBlurred(im, bx.x, bx.y, bx.w, bx.h, lerp(18, 0, k));
         ctx.restore();
-        /* 腿 */
-        ctx.save();
-        ctx.strokeStyle = '#C99A7E'; ctx.lineWidth = Math.max(1.4, S * .017); ctx.lineCap = 'round';
-        for (var i = 0; i < 2; i++) {
-          var a = i ? legA : -legA;
-          var kx = cx + Math.sin(a) * S * .17, ky = hip + Math.cos(a) * S * .38 + bob;
-          ctx.beginPath(); ctx.moveTo(cx, hip + S * .02); ctx.lineTo(kx, ky); ctx.stroke();
-          ctx.beginPath(); ctx.ellipse(kx + S * .01, ky + S * .012, S * .026, S * .014, 0, 0, TAU);
-          ctx.fillStyle = '#5A4E48'; ctx.fill();
-        }
-        ctx.restore();
-        /* 手臂 */
-        ctx.save();
-        ctx.strokeStyle = '#C99A7E'; ctx.lineWidth = Math.max(1.3, S * .015); ctx.lineCap = 'round';
-        for (i = 0; i < 2; i++) {
-          var sd2 = i ? 1 : -1;
-          var aa = i ? armA : -armA;
-          var sx2 = cx + sd2 * S * .072, sy2 = sho + S * .02;
-          var ex = sx2 + Math.sin(aa) * S * .10 + sd2 * S * .028;
-          var ey = sy2 + Math.cos(aa) * S * .21;
-          ctx.beginPath(); ctx.moveTo(sx2, sy2); ctx.lineTo(ex, ey); ctx.stroke();
-          ctx.beginPath(); ctx.arc(ex, ey, S * .021, 0, TAU); ctx.fillStyle = '#E0B79A'; ctx.fill();
-        }
-        ctx.restore();
-        /* 头 */
-        ctx.save();
-        ctx.fillStyle = '#EFD3BC'; ctx.strokeStyle = 'rgba(25,25,25,.35)'; ctx.lineWidth = Math.max(1, S * .010);
-        ctx.beginPath(); ctx.arc(cx, headY, headR, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#2E2A33';
-        ctx.beginPath(); ctx.arc(cx, headY - headR * .10, headR * 1.04, Math.PI * 1.03, Math.PI * 1.97); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(cx - headR * 1.02, headY - headR * .18);
-        ctx.quadraticCurveTo(cx - headR * 1.5, headY + headR * .8, cx - headR * .9, headY + headR * 1.5);
-        ctx.quadraticCurveTo(cx - headR * 1.1, headY + headR * .5, cx - headR * .78, headY + headR * .2);
-        ctx.closePath(); ctx.fill();
-        ctx.restore();
-        /* 星光 */
-        ctx.save();
-        for (var s2 = 0; s2 < sp.length; s2++) {
-          var q = sp[s2];
-          var tw = .5 + .5 * Math.sin(t * 2.2 + q.ph);
-          var rr = (q.d + (t * q.sp2 * .12) % .8);
-          var x = cx + Math.cos(q.a) * S * rr;
-          var y = hip - S * .2 + Math.sin(q.a) * S * rr * .8;
-          ctx.globalAlpha = tw * .82;
-          ctx.fillStyle = s2 % 3 === 0 ? C.clay : C.kraft;
-          var sz = q.sz * (.5 + tw * .6);
-          ctx.beginPath();
-          ctx.moveTo(x, y - sz * 1.7);
-          ctx.quadraticCurveTo(x, y, x + sz * 1.1, y);
-          ctx.quadraticCurveTo(x, y, x, y + sz * 1.7);
-          ctx.quadraticCurveTo(x, y, x - sz * 1.1, y);
-          ctx.quadraticCurveTo(x, y, x, y - sz * 1.7);
-          ctx.closePath(); ctx.fill();
-        }
+        /* 细边 */
+        ctx.globalAlpha = k * .45;
+        ctx.strokeStyle = 'rgba(25,25,25,.18)'; ctx.lineWidth = 1;
+        rrPath(ctx, bx.x + .5, bx.y + .5, bx.w - 1, bx.h - 1, 12); ctx.stroke();
         ctx.restore();
       }
     };
@@ -1082,6 +999,9 @@
     for (i = 0; i < 46; i++) {
       drops.push({ x: R(), y: R(), v: .30 + R() * .55, l: 5 + R() * 11, a: .16 + R() * .30 });
     }
+    var im = loadImg('rainbow');          /* pic2.jpg：等动画播完再浮出来 */
+    var born = nowMs();
+    var PHOTO_AT = 3400;                  /* 动画完整播完的时刻（毫秒） */
     return {
       draw: function (t) {
         paper(ctx, w, h);
@@ -1188,6 +1108,20 @@
           ctx.stroke();
         }
         ctx.restore();
+        /* 动画播完之后：方框里的画面 → pic2.jpg（由模糊到清晰） */
+        var o2 = IMG.rainbow;
+        if (o2.ready && im.naturalWidth) {
+          var pk = reduceMotion ? 1 : smoothstep(clamp((nowMs() - Math.max(born + PHOTO_AT, o2.ready)) / 1500, 0, 1));
+          if (pk > .001) {
+            ctx.save();
+            ctx.globalAlpha = pk;
+            ctx.translate(px + side / 2, py + side / 2);
+            ctx.scale(lerp(1.05, 1, pk), lerp(1.05, 1, pk));
+            ctx.translate(-(px + side / 2), -(py + side / 2));
+            drawBlurred(im, px, py, side, side, lerp(20, 0, pk));
+            ctx.restore();
+          }
+        }
         /* 一次性高光扫过 */
         var sh = seg(t, .9, 2.2);
         if (sh > 0 && sh < 1) {
@@ -1310,7 +1244,7 @@
      ========================================================================== */
   var SCENES = {
     greeting: { make: sceneGreeting, label: '时间' },
-    card: { make: sceneCard, label: '小卡' },
+    card: { make: sceneBlank, label: '小卡' },
     typing: { make: sceneTyping, label: '打字' },
     guess: { make: sceneGuess, label: '下文' },
     timeline: { make: sceneTimeline, label: '四年' },
@@ -1510,41 +1444,73 @@
   function goPrev() { if (now() < flipLock) return; flipLock = now() + FLIP * .45; goTo(pageIdx - 1); }
 
   function bindGestures() {
-    var y0 = null, x0 = null, tStart = 0, dragged = false;
+    var y0 = null, x0 = null, lastX = 0, lastY = 0, tStart = 0, dragged = false, active = false, touchSeen = false;
 
-    function down(x, y) { x0 = x; y0 = y; tStart = now(); dragged = false; }
-    function move(x, y) {
-      if (y0 === null) return;
-      if (Math.abs(y - y0) > 10 || Math.abs(x - x0) > 10) dragged = true;
+    function begin(x, y) {
+      x0 = x; y0 = y; lastX = x; lastY = y;
+      tStart = now(); dragged = false; active = true;
     }
-    function up(x, y) {
-      if (y0 === null) return;
-      var dy = y - y0, dx = x - x0, dt = Math.max(1, now() - tStart);
+    function step(x, y) {
+      if (!active) return;
+      lastX = x; lastY = y;
+      if (Math.abs(y - y0) > 8 || Math.abs(x - x0) > 8) dragged = true;
+    }
+    /* cancelled 时用最后已知位置判定：浏览器中途掐断指针流也能翻页 */
+    function finish(x, y, cancelled) {
+      if (!active) return;
+      active = false;
+      if (!cancelled && isFinite(x) && isFinite(y)) { lastX = x; lastY = y; }
+      var dy = lastY - y0, dx = lastX - x0, dt = Math.max(1, now() - tStart);
       y0 = null;
-      if (Math.abs(dy) < Math.abs(dx) * 1.15) return;          /* 横向滑动不翻页 */
-      var fast = Math.abs(dy) / dt > .55;
-      if (Math.abs(dy) < 28 && !fast) return;
-      tapGuard = now() + 420;                                   /* 拖完抑制随后的 click */
+      if (!dragged) return;                                   /* 没动就是点击，交给 click 处理 */
+      if (Math.abs(dy) < Math.abs(dx) * 1.05) return;          /* 横向手势不翻页 */
+      var fast = Math.abs(dy) / dt > .35;
+      if (Math.abs(dy) < 24 && !fast) return;
+      if (Math.abs(dy) < 10) return;
+      tapGuard = now() + 450;                                  /* 抑制随后的 click */
       if (dy < 0) goNext(); else goPrev();
     }
 
+    /* 触摸：直接读 touch 事件，最可靠 */
+    deckRoot.addEventListener('touchstart', function (e) {
+      touchSeen = true;
+      if (e.touches.length !== 1) return;
+      if (active) return;
+      var t = e.touches[0];
+      begin(t.clientX, t.clientY);
+    }, { passive: true });
+    deckRoot.addEventListener('touchmove', function (e) {
+      if (e.touches.length !== 1) return;
+      var t = e.touches[0];
+      step(t.clientX, t.clientY);
+    }, { passive: true });
+    deckRoot.addEventListener('touchend', function (e) {
+      var t = e.changedTouches[0];
+      if (!t) { finish(NaN, NaN, true); return; }
+      finish(t.clientX, t.clientY, false);
+    }, { passive: true });
+    deckRoot.addEventListener('touchcancel', function () { finish(NaN, NaN, true); }, { passive: true });
+
+    /* 指针：鼠标拖拽 / 触控板，也兜住"只发 pointer 不发 touch"的设备。
+       两条通道共用同一份手势状态：先到的 finish 生效，另一个因 active=false 直接忽略，所以不会翻两次 */
     if (window.PointerEvent) {
       deckRoot.addEventListener('pointerdown', function (e) {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-        down(e.clientX, e.clientY);
+        if (active) return;
+        begin(e.clientX, e.clientY);
+        if (e.pointerId != null) { try { deckRoot.setPointerCapture(e.pointerId); } catch (err) { } }
       });
-      deckRoot.addEventListener('pointermove', function (e) { move(e.clientX, e.clientY); });
-      deckRoot.addEventListener('pointerup', function (e) { up(e.clientX, e.clientY); });
-      deckRoot.addEventListener('pointercancel', function () { y0 = null; });
-    } else {
-      deckRoot.addEventListener('touchstart', function (e) {
-        var t = e.touches[0]; down(t.clientX, t.clientY);
-      }, { passive: true });
-      deckRoot.addEventListener('touchmove', function (e) {
-        var t = e.touches[0]; move(t.clientX, t.clientY);
-      }, { passive: true });
-      deckRoot.addEventListener('touchend', function (e) {
-        var t = e.changedTouches[0]; up(t.clientX, t.clientY);
+      deckRoot.addEventListener('pointermove', function (e) {
+        if (e.pointerType === 'mouse') step(e.clientX, e.clientY);
+        else if (!touchSeen) step(e.clientX, e.clientY);
+      });
+      deckRoot.addEventListener('pointerup', function (e) {
+        if (e.pointerType === 'mouse') finish(e.clientX, e.clientY, false);
+        else if (!touchSeen) finish(e.clientX, e.clientY, false);
+      });
+      deckRoot.addEventListener('pointercancel', function (e) {
+        if (e.pointerType !== 'mouse' && touchSeen) return;   /* 有 touch 事件时以 touchcancel 为准 */
+        finish(NaN, NaN, true);
       });
     }
 
@@ -1602,6 +1568,9 @@
       sync();
       /* 提示：翻一页就收起，或者 6.5 秒后自己走 */
       if (swipeEl) setTimeout(function () { swipeEl.classList.add('is-gone'); }, 6500);
+      /* 预热后面的两张图，等翻到那两页时已经下好 */
+      setTimeout(function () { loadImg('girl'); }, 1200);
+      setTimeout(function () { loadImg('rainbow'); }, 2200);
     }, wait);
   }
 

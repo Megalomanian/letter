@@ -189,7 +189,9 @@ body.is-open .masthead{opacity:1}
   height:100vh;
   display:flex;flex-direction:column;
   opacity:0;transition:opacity .8s var(--ease);
-  touch-action:manipulation;
+  /* 关键：别让浏览器把单指纵向拖拽当成滚动接管，否则指针流会被 pointercancel 掐断 */
+  touch-action:none;
+  touch-action:pinch-zoom;   /* 支持时保留双指缩放，单指交给手势逻辑 */
 }
 @supports (height:1svh){ .app{height:100svh} }
 body.is-open .app{opacity:1}
@@ -200,6 +202,7 @@ body.is-open .app{opacity:1}
   flex:1 1 auto;
   min-height:0;
   overflow:hidden;
+  overscroll-behavior:contain;
 }
 
 .page{
