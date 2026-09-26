@@ -354,133 +354,98 @@
   }
 
   /* ==========================================================================
-     场景 04 / 06 · 粒子汇聚成字
-     点云从画布各处飞向字形像素，聚成字；随后清晰的衬线字浮出来，点若隐若现地留着
+     场景 04 / 06 · 极简文字揭示
+     拆字 → 逐字错峰上浮淡入（带极轻模糊）→ 字距由松收紧 → 一道柔光扫过
+     参考主流做法：拆字 + stagger（GSAP SplitText / Motion 的文本动画都是这套）
      ========================================================================== */
-  var sampleCv = null;
-  function sampleGlyphs(str, fs) {
-    if (!sampleCv) sampleCv = document.createElement('canvas');
-    var pad = Math.ceil(fs * .7);
-    var tw = Math.ceil(fs * str.length * 1.15) + pad * 2;
-    var th = Math.ceil(fs * 1.75) + pad * 2;
-    sampleCv.width = tw; sampleCv.height = th;
-    var c = sampleCv.getContext('2d');
-    c.clearRect(0, 0, tw, th);
-    c.font = fSerif(fs, 400);
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillStyle = '#000';
-    c.fillText(str, tw / 2, th / 2);
-    var data = c.getImageData(0, 0, tw, th).data;
-    var pts = [];
-    for (var y = 0; y < th; y += 2) {
-      for (var x = 0; x < tw; x += 2) {
-        if (data[(y * tw + x) * 4 + 3] > 120) pts.push([x - tw / 2, y - th / 2]);
-      }
-    }
-    return pts;
-  }
-
-  function makeConverge(w, h, PH, o) {
+  function makeReveal(w, h, PH, o) {
     o = o || {};
-    var dotCol = o.dot || C.violet;
-    var accent = o.accent || C.clay;
     var inkCol = o.ink || C.ink;
+    var accent = o.accent || C.clay;
     var glowCol = o.glow || null;
     var cycle = o.cycle || 3.8;
-    var fs = clamp(w * .072, 17, 32);
-    var R = mulberry32(o.seed || 3);
-    var N = Math.round(clamp(w * h / 1500, 150, 400));
+    var fs = clamp(w * .075, 18, 34);
+    var STEP = .055;                     /* 每个字错开的时间 */
     var sets = PH.map(function (str) {
-      var pts = sampleGlyphs(str, fs), out = [], i;
-      if (!pts.length) return [];
-      for (i = 0; i < N; i++) out.push(pts[Math.floor(i * pts.length / N) % pts.length]);
-      return out;
+      ctx.save();
+      ctx.font = fSerif(fs, 400);
+      var chars = str.split(''), ws = [];
+      for (var i2 = 0; i2 < chars.length; i2++) ws.push(ctx.measureText(chars[i2]).width);
+      ctx.restore();
+      var total = 0;
+      for (i2 = 0; i2 < ws.length; i2++) total += ws[i2];
+      return { chars: chars, ws: ws, total: total };
     });
-    var parts = [], i;
-    for (i = 0; i < N; i++) {
-      var sx0 = R() * w, sy0 = h * (.10 + R() * .80);
-      parts.push({
-        sx: sx0, sy: sy0, hx: sx0, hy: sy0,
-        d: R() * .42, j: .6 + R() * .9,
-        r: 1.1 + R() * 1.5, warm: (i % 9 === 0)
-      });
-    }
     return {
       draw: function (t) {
         paper(ctx, w, h);
         var k = Math.floor(t / cycle) % PH.length, lt = t % cycle;
-        var pts = sets[k] || [];
-        var raw = clamp((lt - .18) / 1.00, 0, 1);         /* 0.18s 起飞，约 1.2s 聚齐 */
-        var textIn = smoothstep(clamp((lt - 1.05) / .55, 0, 1));
-        var fade = 1 - smoothstep(clamp((lt - (cycle - .72)) / .68, 0, 1));
+        var S = sets[k], n = S.chars.length;
+        var spread = 1 - easeOutCubic(clamp(lt / .95, 0, 1));      /* 字距：松 → 收 */
+        var fade = 1 - smoothstep(clamp((lt - (cycle - .7)) / .62, 0, 1));
         var cx = w / 2, cy = h * .52;
+        var gap = lerp(fs * .03, fs * .30, spread);
+        var total = 0, i2;
+        for (i2 = 0; i2 < n; i2++) total += S.ws[i2] + (i2 < n - 1 ? gap : 0);
 
-        /* 暖光（06 用） */
+        /* 06 用的一层暖光 */
         if (glowCol) {
-          var gp = (.20 + .80 * textIn) * fade;
-          var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) * .68);
+          var gp = (.18 + .82 * clamp(lt / 1.1, 0, 1)) * fade;
+          var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) * .66);
           g.addColorStop(0, glowCol); g.addColorStop(1, 'rgba(255,255,255,0)');
           ctx.save(); ctx.globalAlpha = gp; ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); ctx.restore();
         }
 
-        /* 清晰的字先画，粒子叠在上面 */
-        if (textIn > .01 && fade > .01) {
-          ctx.save();
-          ctx.globalAlpha = textIn * fade;
-          ctx.font = fSerif(fs, 400);
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillStyle = inkCol;
-          ctx.fillText(PH[k], cx, cy);
-          ctx.restore();
-        }
-
-        /* 粒子 */
         ctx.save();
-        var fadeDots = 1 - textIn * .5;
-        for (var b2 = 0; b2 < 2; b2++) {          /* 拖尾线条：按颜色分两批 */
-          ctx.strokeStyle = b2 ? accent : dotCol;
-          ctx.lineWidth = 1.2; ctx.lineCap = 'round';
-          ctx.globalAlpha = fade * fadeDots * (b2 ? .30 : .20);
-          ctx.beginPath();
-          for (i = 0; i < N; i++) {
-            var q = parts[i];
-            if ((q.warm ? 1 : 0) !== b2) continue;
-            /* 拖尾随落定收短：飞行时是长长的射线，落定后只剩一点点 */
-            var pr2 = clamp((raw - q.d * .5) / (1 - q.d * .5 + .0001), 0, 1);
-            var f0 = lerp(0, .80, pr2);
-            ctx.moveTo(lerp(q.sx, q.hx, f0), lerp(q.sy, q.hy, f0));
-            ctx.lineTo(q.hx, q.hy);
-          }
-          ctx.stroke();
-        }
-        for (i = 0; i < N; i++) {
-          var p = parts[i], tp = pts[i];
-          if (!p || !tp) continue;                 /* 防御：取样点不足时跳过这一颗 */
-          var pr = clamp((raw - p.d * .5) / (1 - p.d * .5 + .0001), 0, 1);
-          var pp = easeOutBack(pr, 1.06);           /* 轻微过冲，落点更有弹性 */
-          var tx = cx + tp[0], ty = cy + tp[1];
-          var wob = (1 - pr) * 16 * p.j;
-          var x = lerp(p.sx, tx, pp) + Math.sin(t * 1.4 + i) * wob;
-          var y = lerp(p.sy, ty, pp) + Math.cos(t * 1.2 + i * 1.7) * wob;
-          var tw = .72 + .28 * Math.sin(t * 2.2 + i * .9);
-          p.hx = x; p.hy = y;
-          ctx.globalAlpha = fade * fadeDots * tw * (.40 + .60 * pr);
-          ctx.fillStyle = p.warm ? accent : dotCol;
-          ctx.beginPath();
-          ctx.arc(x, y, p.r * (.7 + .5 * pr), 0, TAU);
-          ctx.fill();
+        ctx.font = fSerif(fs, 400);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        var x = cx - total / 2, y = cy;
+        var placed = [];
+        for (i2 = 0; i2 < n; i2++) {
+          var e = easeOutCubic(clamp((lt - .10 - i2 * STEP) / .62, 0, 1));
+          ctx.globalAlpha = e * fade;
+          if (canFilter && e < 1) ctx.filter = 'blur(' + ((1 - e) * 3.4).toFixed(2) + 'px)';
+          ctx.fillStyle = inkCol;
+          ctx.fillText(S.chars[i2], x, y + (1 - e) * fs * .30);
+          ctx.filter = 'none';
+          placed.push(x + S.ws[i2] / 2);
+          x += S.ws[i2] + gap;
         }
         ctx.restore();
+
+        /* 柔光扫过：一条暖色光带横掠过文字 */
+        var sw = clamp((lt - 1.05) / .95, 0, 1);
+        if (sw > 0 && sw < 1 && fade > .05) {
+          var bandW = Math.max(total * .8, fs * 3);
+          var bx = cx - total / 2 - bandW + (total + bandW * 2) * sw;
+          ctx.save();
+          ctx.font = fSerif(fs, 400);
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.beginPath();
+          ctx.rect(bx - bandW / 2, cy - fs, bandW, fs * 2);
+          ctx.clip();
+          var lg = ctx.createLinearGradient(bx - bandW / 2, 0, bx + bandW / 2, 0);
+          lg.addColorStop(0, 'rgba(255,255,255,0)');
+          lg.addColorStop(.5, accent);
+          lg.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.globalAlpha = Math.sin(sw * Math.PI) * .85 * fade;
+          ctx.fillStyle = lg;
+          x = cx - total / 2;
+          for (i2 = 0; i2 < n; i2++) {
+            ctx.fillText(S.chars[i2], x, cy);
+            x += S.ws[i2] + fs * .03;
+          }
+          ctx.restore();
+        }
       }
     };
   }
   function sceneGuess(w, h) {
-    return makeConverge(w, h, ['或许你已经猜到', '接下来的话'], { dot: C.violet, accent: C.clay, seed: 3 });
+    return makeReveal(w, h, ['或许你已经猜到', '接下来的话'], { accent: C.clay, seed: 3 });
   }
   function sceneOpen(w, h) {
-    return makeConverge(w, h, ['洒脱一些', '不再遮掩'], {
-      dot: C.violet, accent: C.kraft, ink: C.ink,
-      glow: 'rgba(212,162,127,.26)', seed: 11, cycle: 3.6
+    return makeReveal(w, h, ['洒脱一些', '不再遮掩'], {
+      accent: C.kraft, glow: 'rgba(212,162,127,.24)', cycle: 3.6
     });
   }
 
@@ -1043,24 +1008,40 @@
     var im = loadImg('rainbow');          /* pic2.jpg：等动画播完再浮出来 */
     var born = nowMs();
     var PHOTO_AT = 3400;                  /* 动画完整播完的时刻（毫秒） */
-    /* 爱心烟花 */
-    var sparks = [], fired = 0, t0Fire = 0;
-    var HCOL = ['#F06BA8', '#E85A6E', '#9A8AE8'];
-    function heartBurst(bx, by, scale, col) {
-      var n = 76, j;
-      for (j = 0; j < n; j++) {
-        var th = (j / n) * TAU;
-        var hx = 16 * Math.pow(Math.sin(th), 3);
-        var hy = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
-        var sp = scale * (.86 + R() * .28);
-        sparks.push({
-          x: bx, y: by, px: bx, py: by, ox: bx, oy: by,
-          vx: hx * sp, vy: hy * sp,
-          life: 0, max: 1.35 + R() * .6,
-          c: col, r: 1.1 + R() * 1.3
-        });
-      }
+    /* 全屏爱心雨：照片浮现后，小红心不断从屏幕底端冒出、边晃边往上飘 */
+    var hearts = [], hStart = 0, hAcc = 0;
+    var HCOL = ['#FF3D62', '#E82F52', '#D9244A', '#FF5C7A'];
+    function spawnHeart() {
+      var s2 = Math.min(w, h) * (.028 + R() * .042);        /* 半宽 */
+      hearts.push({
+        x: R() * w,
+        y: h + s2 * 2.5,
+        vy: -(h * (.12 + R() * .20)),                       /* px/s，向上：慢一点，屏上才留得住 */
+        s: s2,
+        rot: (R() - .5) * .55,
+        sway: 5 + R() * 17,
+        swaySp: .5 + R() * 1.2,
+        ph: R() * TAU,
+        life: 0,
+        max: 6.5 + R() * 4.0,
+        c: HCOL[Math.floor(R() * HCOL.length)]
+      });
     }
+    /* 把一颗（可旋转的）爱心塞进当前路径，便于按颜色/透明度批量填充 */
+    function heartInto(x, y, s2, rot) {
+      var co = Math.cos(rot), si = Math.sin(rot);
+      function PX(px, py) { return x + px * co - py * si; }
+      function PY(px, py) { return y + px * si + py * co; }
+      ctx.moveTo(PX(0, s2 * .78), PY(0, s2 * .78));
+      ctx.bezierCurveTo(PX(-s2 * 1.35, -s2 * .30), PY(-s2 * 1.35, -s2 * .30),
+        PX(-s2 * .52, -s2 * 1.28), PY(-s2 * .52, -s2 * 1.28),
+        PX(0, -s2 * .42), PY(0, -s2 * .42));
+      ctx.bezierCurveTo(PX(s2 * .52, -s2 * 1.28), PY(s2 * .52, -s2 * 1.28),
+        PX(s2 * 1.35, -s2 * .30), PY(s2 * 1.35, -s2 * .30),
+        PX(0, s2 * .78), PY(0, s2 * .78));
+      ctx.closePath();
+    }
+
     return {
       draw: function (t, dt) {
         paper(ctx, w, h);
@@ -1171,16 +1152,7 @@
         var o2 = IMG.rainbow;
         if (o2.ready && im.naturalWidth) {
           var pk = reduceMotion ? 1 : smoothstep(clamp((nowMs() - Math.max(born + PHOTO_AT, o2.ready)) / 1500, 0, 1));
-          if (!reduceMotion && pk > .40) {
-            if (!t0Fire) t0Fire = nowMs();
-            /* 三发，间隔 0.42s */
-            while (fired < 3 && nowMs() - t0Fire >= fired * 420) {
-              var hp = [[.26, .28], [.74, .24], [.50, .64]][fired];
-              heartBurst(px + side * hp[0], py + side * hp[1],
-                side * (.018 + .003 * fired), HCOL[fired % HCOL.length]);
-              fired++;
-            }
-          }
+          if (!reduceMotion && pk > .32 && !hStart) hStart = nowMs();
           if (pk > .001) {
             ctx.save();
             ctx.globalAlpha = pk;
@@ -1211,51 +1183,37 @@
         ctx.restore();
         ctx.restore();
 
-        /* 爱心烟花：在照片之上炸开 */
-        if (sparks.length) {
-          dt = dt || 0;
-          var damp = Math.pow(.60, dt), i, p, ci, lv;
-          for (i = sparks.length - 1; i >= 0; i--) {
-            p = sparks[i];
-            p.life += dt;
-            if (p.life >= p.max) { sparks.splice(i, 1); continue; }
-            p.px = p.x; p.py = p.y;
-            p.vx *= damp;
-            p.vy = p.vy * damp + (p.life > .55 ? 58 * dt : 0);   /* 先撑住心形，再落下来 */
-            p.x += p.vx * dt; p.y += p.vy * dt;
+        /* 爱心雨：底端持续冒出小红心，向上飘过整个画面 */
+        if (hStart) {
+          var nowp = nowMs(), ip;
+          hAcc += dt * 8.0;                                  /* 每秒约 8 颗 */
+          while (hAcc >= 1 && hearts.length < 170) { spawnHeart(); hAcc -= 1; }
+          for (ip = hearts.length - 1; ip >= 0; ip--) {
+            var qh = hearts[ip];
+            qh.life += dt;
+            if (qh.life > qh.max || qh.y < -qh.s * 4) { hearts.splice(ip, 1); continue; }
+            qh.y += qh.vy * dt;
+            qh.x += Math.sin(nowp / 1000 * qh.swaySp + qh.ph) * qh.sway * dt;
+            qh.rot += Math.sin(nowp / 1400 + qh.ph) * .12 * dt;
           }
           var LV = 4;
-          for (ci = 0; ci < HCOL.length; ci++) {
-            for (lv = 0; lv < LV; lv++) {
-              var lo = lv / LV, hi = (lv + 1) / LV, heads = 0;
+          for (var ci = 0; ci < HCOL.length; ci++) {
+            for (var lv = 0; lv < LV; lv++) {
+              var lo = lv / LV, hi = (lv + 1) / LV;
               ctx.save();
-              ctx.globalAlpha = (lo + hi) / 2;
-              ctx.strokeStyle = HCOL[ci]; ctx.lineWidth = 1.7; ctx.lineCap = 'round';
               ctx.fillStyle = HCOL[ci];
+              ctx.globalAlpha = (lo + hi) / 2 * .92;
               ctx.beginPath();
-              for (i = 0; i < sparks.length; i++) {
-                p = sparks[i];
-                if (p.c !== HCOL[ci]) continue;
-                var a = 1 - p.life / p.max;
-                if (a < lo || a >= hi) continue;
-                ctx.moveTo(p.ox + (p.x - p.ox) * .55, p.oy + (p.y - p.oy) * .55);
-                ctx.lineTo(p.x, p.y);
-                heads++;
+              var added = 0;
+              for (ip = 0; ip < hearts.length; ip++) {
+                var hp2 = hearts[ip];
+                if (hp2.c !== HCOL[ci]) continue;
+                var a2 = clamp(hp2.life / .35, 0, 1) * clamp((hp2.max - hp2.life) / .9, 0, 1);
+                if (a2 < lo || (lv < LV - 1 && a2 >= hi)) continue;   /* 最后一档要包含 1.0，否则全显的粒子会被漏掉 */
+                heartInto(hp2.x, hp2.y, hp2.s, hp2.rot);
+                added++;
               }
-              ctx.stroke();
-              if (heads) {
-                ctx.beginPath();
-                for (i = 0; i < sparks.length; i++) {
-                  p = sparks[i];
-                  if (p.c !== HCOL[ci]) continue;
-                  var a2 = 1 - p.life / p.max;
-                  if (a2 < lo || a2 >= hi) continue;
-                  ctx.moveTo(p.x + p.r, p.y);
-                  ctx.arc(p.x, p.y, p.r, 0, TAU);
-                }
-                ctx.fill();
-              }
-              ctx.restore();
+              ctx.fill();
             }
           }
         }
