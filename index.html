@@ -19,12 +19,32 @@
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="stylesheet" href="assets/style.css">
-<noscript><style>.gate{display:none!important}.line .ch{opacity:1!important;transform:none!important}</style></noscript>
+<noscript><style>
+  .gate{display:none!important}
+  body{overflow:auto!important;height:auto!important}
+  .app{display:block!important;opacity:1!important;height:auto!important}
+  .deck{height:auto!important;position:static!important}
+  .page{position:static!important;opacity:1!important;transform:none!important;padding:38px 22px!important}
+  .page .ch{opacity:1!important;transform:none!important}
+  .stage-wrap{position:sticky!important;bottom:0!important;height:38vh!important}
+</style></noscript>
 </head>
-<body class="is-locked">
+<body>
 
-<!-- 阅读进度 -->
+<!-- 顶部进度：表示读到第几页 -->
 <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+
+<!-- 页眉 -->
+<header class="masthead" id="masthead">
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor">
+    <ellipse cx="10.3" cy="11.6" rx="5.2" ry="4.5" transform="rotate(-22 10.3 11.6)"/>
+    <ellipse cx="21.7" cy="11.6" rx="5.2" ry="4.5" transform="rotate(22 21.7 11.6)"/>
+    <ellipse cx="11.6" cy="20.4" rx="4.2" ry="3.6" transform="rotate(18 11.6 20.4)"/>
+    <ellipse cx="20.4" cy="20.4" rx="4.2" ry="3.6" transform="rotate(-18 20.4 20.4)"/>
+    <rect x="15.15" y="7" width="1.7" height="17" rx=".85"/>
+  </g></svg>
+  <span class="masthead__meta" id="stamp">此刻</span>
+</header>
 
 <!-- 开场：信封 -->
 <div class="gate" id="gate">
@@ -40,7 +60,7 @@
           <ellipse cx="21.7" cy="11.6" rx="5.2" ry="4.5" transform="rotate(22 21.7 11.6)"/>
           <ellipse cx="11.6" cy="20.4" rx="4.2" ry="3.6" transform="rotate(18 11.6 20.4)"/>
           <ellipse cx="20.4" cy="20.4" rx="4.2" ry="3.6" transform="rotate(-18 20.4 20.4)"/>
-          <rect x="15.15" y="7" width="1.7" height="17" rx="0.85"/>
+          <rect x="15.15" y="7" width="1.7" height="17" rx=".85"/>
         </g></svg>
       </span>
     </span>
@@ -51,48 +71,62 @@
 
 <div class="app" id="app" aria-hidden="true">
 
-  <main class="letter" id="letter">
-    <header class="masthead">
-      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><g fill="currentColor">
-        <ellipse cx="10.3" cy="11.6" rx="5.2" ry="4.5" transform="rotate(-22 10.3 11.6)"/>
-        <ellipse cx="21.7" cy="11.6" rx="5.2" ry="4.5" transform="rotate(22 21.7 11.6)"/>
-        <ellipse cx="11.6" cy="20.4" rx="4.2" ry="3.6" transform="rotate(18 11.6 20.4)"/>
-        <ellipse cx="20.4" cy="20.4" rx="4.2" ry="3.6" transform="rotate(-18 20.4 20.4)"/>
-        <rect x="15.15" y="7" width="1.7" height="17" rx="0.85"/>
-      </g></svg>
-      <span class="masthead__meta" id="stamp">此刻</span>
-    </header>
+  <main class="deck" id="deck">
+    <section class="page is-active" data-scene="greeting">
+      <p class="line line--lead">早上好，下午好，或者晚上好</p>
+    </section>
 
-    <article class="lines" id="lines">
-      <p class="line line--lead" data-scene="greeting" data-cap="时间">早上好，下午好，或者晚上好</p>
-      <p class="line" data-scene="card" data-cap="小卡">如果你看到这行文字，说明你已经收下了这张小卡</p>
-      <p class="line" data-scene="typing" data-cap="打字">我还是更倾向于将文字打出来</p>
-      <p class="line" data-scene="guess" data-cap="下文">或许你已经猜到接下来的话</p>
-      <p class="line" data-scene="timeline" data-cap="四年">在宁夏大学的四年时光，除去大四一年的实习，我在校的时间只剩下大三一年</p>
-      <p class="line" data-scene="bloom" data-cap="洒脱">于是我决定活得洒脱一些，不再遮掩，勇敢表露自己的感情</p>
-      <p class="line" data-scene="blur" data-cap="初见">很抱歉，我早就记不得我们第一次在何时，以何种方式见面</p>
-      <p class="line" data-scene="icons" data-cap="印象">当时的脑海里，只依稀留下黑框眼镜、粉色长裙和高跟鞋</p>
-      <p class="line" data-scene="girl" data-cap="姑娘">以及一位刚刚步入大学，富有活力的姑娘</p>
-      <p class="line line--accent" data-scene="purple" data-cap="紫色">紫色，令人产生一些富有生命力的联想</p>
-      <p class="line" data-scene="butterfly" data-cap="蝴蝶">做一只蝴蝶，飞舞在世间，你或许见识到许多风景</p>
-      <p class="line line--ask" data-scene="rainbow" data-cap="彩虹">你愿意为雨后乍现的一抹彩虹，短暂驻足吗？</p>
+    <section class="page" data-scene="card">
+      <p class="line">如果你看到这行文字，说明你已经收下了这张小卡</p>
+    </section>
 
-      <section class="end" data-scene="seal" data-cap="收好">
-        <span class="end__rule" aria-hidden="true"></span>
-        <button class="end__btn" id="againBtn" type="button">从头再读一遍</button>
-        <span class="end__note">轻触下方画布，可以重播当前动画</span>
-      </section>
-    </article>
+    <section class="page" data-scene="typing">
+      <p class="line">我还是更倾向于将文字打出来</p>
+    </section>
+
+    <section class="page" data-scene="guess">
+      <p class="line">或许你已经猜到接下来的话</p>
+    </section>
+
+    <section class="page" data-scene="timeline">
+      <p class="line">在宁夏大学的四年时光，除去大四一年的实习，我在校的时间只剩下大三一年</p>
+    </section>
+
+    <section class="page" data-scene="reveal">
+      <p class="line">于是我决定活得洒脱一些，不再遮掩，勇敢表露自己的感情</p>
+    </section>
+
+    <section class="page" data-scene="blur">
+      <p class="line">很抱歉，我早就记不得我们第一次在何时，以何种方式见面</p>
+    </section>
+
+    <section class="page" data-scene="icons">
+      <p class="line">当时的脑海里，只依稀留下黑框眼镜、粉色长裙和高跟鞋</p>
+    </section>
+
+    <section class="page" data-scene="girl">
+      <p class="line">以及一位刚刚步入大学，富有活力的姑娘</p>
+    </section>
+
+    <section class="page" data-scene="purple">
+      <p class="line line--accent">紫色，令人产生一些富有生命力的联想</p>
+    </section>
+
+    <section class="page" data-scene="butterfly">
+      <p class="line">做一只蝴蝶，飞舞在世间，你或许见识到许多风景</p>
+    </section>
+
+    <section class="page" data-scene="rainbow">
+      <p class="line line--ask">你愿意为雨后乍现的一抹彩虹，短暂驻足吗？</p>
+    </section>
+
+    <section class="page page--finale" data-scene="seal" aria-label="收好"></section>
   </main>
 
   <aside class="stage-wrap">
-    <div class="stage" id="stage" tabindex="0" role="img" aria-label="与当前文字对应的动画">
+    <div class="stage" id="stage" role="img" aria-label="与当前文字对应的动画">
       <canvas id="cv"></canvas>
-      <div class="cap">
-        <span class="cap__idx" id="capIdx">01</span>
-        <span class="cap__name" id="capName">时间</span>
-      </div>
-      <span class="swipe" id="swipe" aria-hidden="true">向下滑动 · 继续读</span>
+      <span class="swipe" id="swipe" aria-hidden="true">向上滑动 · 继续</span>
     </div>
   </aside>
 </div>
