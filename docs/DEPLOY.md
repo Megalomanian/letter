@@ -74,6 +74,25 @@
 
 > 如果 `gh` 没登录：`gh auth login` 一次即可（本机已装 `gh` 2.67）。
 
+> **⚠️ 两个坑（都踩过了）**
+>
+> 1. **仓库必须是 Public**：免费账号的 GitHub Pages 只对公开仓库开放。把仓库切成 private 会让 Pages 立刻停用——
+>    站点变 404、部署工作流开始刷 `HttpError: Not Found`。**改回 public 后必须重新触发一次构建**才会恢复。
+> 2. **Pages 的 Source 要和部署方式一致**：Settings → Pages 里选 **GitHub Actions**（`build_type: workflow`）时，
+>    仓库里必须有 `.github/workflows/*.yml` 去跑 `actions/deploy-pages`；这个项目没有构建步骤，
+>    选 **Deploy from a branch**（`build_type: legacy`）最省事——推代码就自动发布，不需要任何工作流文件。
+>
+> 一行命令查看/修复：
+>
+> ```bash
+> gh api repos/你的用户名/letter/pages | grep -E '"status"|"build_type"'
+>
+> # 改回"分支构建"并立刻重新发布
+> gh api -X PUT repos/你的用户名/letter/pages \
+>   -f build_type=legacy -f "source[branch]=main" -f "source[path]=/"
+> gh api -X POST repos/你的用户名/letter/pages/builds
+> ```
+
 ---
 
 ## 3. 其它可选（都是一条命令）
